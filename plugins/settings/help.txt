@@ -485,3 +485,19 @@ pyTivo will significantly speed up the process. If not set or share is not
 valid pyTivo will use the original path of your media content for temporary storage.
 Example Settings: Videos, Movies, TV Shows, etc.
 Available In: Server
+
+embedded_subs
+
+Mode: select
+Options: OnlyForced/On/Off
+Default Setting: Off
+Valid Entries: OnlyForced/On/Off
+Required: No
+Description: Controls whether subtitle files embedded in a video file will be
+burned into the re-encoded video sent to the Tivo. If "On," the first/default
+embedded subtitle stream will always be used. "Off" means no embedded
+subtitles will be used. "OnlyForced" means only an embedded subtitle stream
+with the "forced" flag will be used. The "subFile" entry in metadata files
+will take preference over this setting.
+Example Settings: OnlyForced/On/Off
+Available In: Server

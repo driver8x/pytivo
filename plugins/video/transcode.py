@@ -339,7 +339,13 @@ def select_videofilter(inFile):
     if subtitles:
         return ['-vf', subtitles]
 
+    embed = config.get_server('embedded_subs', 'Off')
     subfile = vInfo.get('subFile')
+    if not subfile:
+        if embed == 'On' or (embed == 'OnlyForced' and vInfo.get('forcedSub')):
+            subfile = inFile
+
+    logger.info("subfile: {0}".format(subfile))
 
     #first select a subFile in the metadata.txt file
     #then select the subFile with the same filename as the video file (video file: video.mpg, subFile: video.mpg.srt)
@@ -349,26 +355,43 @@ def select_videofilter(inFile):
         subfile = os.path.join(os.path.split(inFile)[0], os.path.basename(inFile) + '.srt')
     elif os.path.exists(os.path.join(os.path.split(inFile)[0], os.path.basename(inFile) + '.ass')):
         subfile = os.path.join(os.path.split(inFile)[0], os.path.basename(inFile) + '.ass')
+    elif subfile == 'self':
+        subfile = inFile
+    elif not subfile or not os.path.exists(subfile):
+        subfile = ''
 
     if subfile:
-        if subfile == inFile:
-            #TODO need to look at handling when there is more than one subtitle track
-            subType = vInfo.get('subType')
-        else:
+        sInfo = vInfo
+        if subfile != inFile:
             sInfo = video_info(subfile)
-            subType = sInfo.get('subType')
             logger.info('sInfo: %s' % sInfo)
 
+        subType = sInfo.get('subType')
+        forcedsub = sInfo.get('forcedSub')
+        logger.info("subType: {0}{1}".format(subType, '' if forcedsub == None else '(forced)'))
+
         #escape ffmpeg special characters
-        #not sure how to escape ' - currently can't support files with this character in the path
+        #subfile_escape = re.sub(r"'", r"\\\\\\'", subfile_escape) #can't seem to escape ' character
         subfile_escape = re.sub(r'([\\\[\]\:@;,])', r'\\\1', subfile)
 
-        if subType == 'subrip':
-            vfilter = ['-vf', 'subtitles=\\\'%s\\\'' % subfile_escape]
-            logger.info('video filter: %s' % vfilter)
-            return vfilter
-        elif subType == 'ass':
-            vfilter = ['-vf', 'ass=\\\'%s\\\'' % subfile_escape]
+        # Use "subStream" tag to determine which subtitle stream to use
+        textSubStream = ''
+        picSubStream = ''
+        subStream = vInfo.get('subStream', forcedsub)
+        if subStream and re.match(r'^[0-9]+$', str(subStream)):
+            logger.info("subStream: {0}".format(subStream))
+            textSubStream = ":si={0}".format(subStream)
+            picSubStream = ":{0}".format(subStream)
+
+        vfilter = []
+        if re.search(r'ass|ssa', subType) and subfile != inFile:
+            vfilter = ['-vf', "ass=\\'{0}{1}\\'".format(subfile_escape, textSubStream)]
+        elif re.search(r'ass|ssa|subrip|srt|sup|sami|text|microdvd|subviewer|stl|jaco|mpl|pjs|vplayer|eia|webvtt', subType): # jacosub can also include gfx?
+            vfilter = ['-vf', "subtitles=\\'{0}\\'{1}".format(subfile_escape, textSubStream)]
+        elif re.search(r'pgs|vob|dvdsub|dvd_subtitle', subType):
+            vfilter = ['-filter_complex', "[0:v][0:s{0}]overlay".format(picSubStream)]
+
+        if vfilter:
             logger.info('video filter: %s' % vfilter)
             return vfilter
 
@@ -852,7 +875,6 @@ def video_info(inFile, cache=True):
              'aKbps': r'.*Audio: .+, (.+) (?:kb/s).*',     # audio bitrate
              'aCodec': r'.*Audio: ([^, ]+)',             # audio codec
              'aFreq': r'.*Audio: .+, (.+) (?:Hz).*',       # audio frequency
-             'subType': r'.*Subtitle: ([a-zA-Z]+)',       # subtitle type
              'mapVideo': r'([0-9]+[.:]+[0-9]+).*: Video:.*'}  # video mapping
 
     for attr in attrs:
@@ -867,6 +889,16 @@ def video_info(inFile, cache=True):
             else:
                 vInfo[attr] = None
             debug('failed at ' + attr)
+
+    subMatches = re.findall(r'Subtitle:\s*(\w+)\s*(?:\(default\))?\s*(\(forced\))?', output)
+    for m in range(len(subMatches)):
+        g = subMatches[m]
+        if len(g[1]) > 0:
+            vInfo['subType'] = g[0]
+            vInfo['forcedSub'] = m
+            break
+        elif not vInfo.get('subType'):
+            vInfo['subType'] = g[0]
 
     rezre = re.compile(r'.*Audio: .+, (?:(\d+)(?:(?:\.(\d).*)?(?: channels.*)?)|(stereo|mono)),.*')
     x = rezre.search(output)
@@ -1035,6 +1067,8 @@ def video_info(inFile, cache=True):
             vInfo['subtitles'] = data[key]
         elif key.lower() == 'subfile':
             vInfo['subFile'] = data[key]
+        elif key.lower() == 'substream':
+            vInfo['subStream'] = data[key]
 
     if cache:
         info_cache[inFile] = (mtime, vInfo)
