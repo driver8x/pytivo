@@ -342,7 +342,7 @@ def select_videofilter(inFile):
     embed = config.get_server('embedded_subs', 'Off')
     subfile = vInfo.get('subFile')
     if not subfile:
-        if embed == 'On' or (embed == 'OnlyForced' and vInfo.get('forcedSub')):
+        if embed == 'On' or (embed == 'OnlyForced' and vInfo.get('forcedSub') != None):
             subfile = inFile
 
     logger.info("subfile: {0}".format(subfile))
@@ -368,7 +368,7 @@ def select_videofilter(inFile):
 
         subType = sInfo.get('subType')
         forcedsub = sInfo.get('forcedSub')
-        logger.info("subType: {0}{1}".format(subType, '' if forcedsub == None else '(forced)'))
+        logger.info("subType: {0}{1}".format(subType, '' if forcedsub == None else ' (forced)'))
 
         #escape ffmpeg special characters
         #subfile_escape = re.sub(r"'", r"\\\\\\'", subfile_escape) #can't seem to escape ' character
@@ -378,14 +378,14 @@ def select_videofilter(inFile):
         textSubStream = ''
         picSubStream = ''
         subStream = vInfo.get('subStream', forcedsub)
-        if subStream and re.match(r'^[0-9]+$', str(subStream)):
+        if subStream != None and re.match(r'^[0-9]+$', str(subStream)):
             logger.info("subStream: {0}".format(subStream))
             textSubStream = ":si={0}".format(subStream)
             picSubStream = ":{0}".format(subStream)
 
         vfilter = []
         if re.search(r'ass|ssa', subType) and subfile != inFile:
-            vfilter = ['-vf', "ass=\\'{0}{1}\\'".format(subfile_escape, textSubStream)]
+            vfilter = ['-vf', "ass=\\'{0}\\'".format(subfile_escape)]
         elif re.search(r'ass|ssa|subrip|srt|sup|sami|text|microdvd|subviewer|stl|jaco|mpl|pjs|vplayer|eia|webvtt', subType): # jacosub can also include gfx?
             vfilter = ['-vf', "subtitles=\\'{0}\\'{1}".format(subfile_escape, textSubStream)]
         elif re.search(r'pgs|vob|dvdsub|dvd_subtitle', subType):
